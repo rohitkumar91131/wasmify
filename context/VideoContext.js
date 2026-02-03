@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState } from "react"
 import { useFFmpeg } from "@/hooks/useFFmpeg"
-// 1. fetchFile import karo memory bachane ke liye
 import { fetchFile } from "@ffmpeg/util"
 
 const VideoContext = createContext()
@@ -21,35 +20,36 @@ export function VideoProvider({ children }) {
     setLoading(true)
     setProgress(0)
 
-    const inputName = "input.mp4"
-    const outputName = `output.${format}`
-
     try {
-      // ✅ FIX 1: Better Memory Handling
-      // 'file.arrayBuffer()' ki jagah 'fetchFile' use karein.
-      // Ye internally memory chunks ko better manage karta hai.
+      // 1. Get the correct file extension (e.g., 'mov', 'avi')
+      const fileExt = file.name.split('.').pop()
+      const inputName = `input.${fileExt}`
+      const outputName = `output.${format}`
+
+      // 2. Write file to memory (Using fetchFile for better memory management)
       const fileData = await fetchFile(file)
       await ffmpeg.writeFile(inputName, fileData)
 
-      // Listen for progress
+      // 3. Progress Listener
       ffmpeg.on("progress", ({ progress: p }) => {
         setProgress(Math.round(p * 100))
       })
 
-      // ✅ FIX 2: RAM-Safe Command
-      // Agar file badi hai to 'ultrafast' preset aur 'scale' zaroori hai
-      // taaki processing ke time RAM overflow na ho.
+      // 4. Run FFmpeg Command (Single-Threaded Optimized)
+      // Note: We removed '-threads' flag because we are using single-threaded mode
       await ffmpeg.exec([
         "-i", inputName,
-        "-preset", "ultrafast",  // Uses minimal RAM
-        "-crf", "28",            // Thodi quality kam karke crash rokta hai
+        "-preset", "ultrafast",  // Critical for browser speed
+        "-crf", "28",            // Balances quality vs memory usage
         outputName
       ])
 
+      // 5. Read Output
       const data = await ffmpeg.readFile(outputName)
 
-      // ✅ FIX 3: Save File (Native Picker)
+      // 6. Save File (Native Picker with Fallback)
       try {
+        // Try Native Save (Chrome/Edge) - bypasses RAM limits significantly
         if (window.showSaveFilePicker) {
           const handle = await window.showSaveFilePicker({
             suggestedName: outputName,
@@ -62,7 +62,7 @@ export function VideoProvider({ children }) {
           await writable.write(data)
           await writable.close()
         } else {
-          // Fallback
+          // Legacy Download (Firefox/Safari)
           const blob = new Blob([data.buffer], { type: `video/${format}` })
           const url = URL.createObjectURL(blob)
           const a = document.createElement("a")
@@ -72,20 +72,23 @@ export function VideoProvider({ children }) {
           URL.revokeObjectURL(url)
         }
       } catch (saveErr) {
-        if (saveErr.name !== 'AbortError') console.error(saveErr)
+        // Ignore abort errors (user clicked cancel)
+        if (saveErr.name !== 'AbortError') {
+          console.error("Save failed:", saveErr)
+        }
       }
 
-      // Cleanup
+      // 7. Cleanup (Vital for Vercel/Browser memory)
       await ffmpeg.deleteFile(inputName)
       await ffmpeg.deleteFile(outputName)
 
     } catch (err) {
       console.error(err)
-      // User ko clear error dikhao
-      if (err.message.includes("memory")) {
-        alert("File too big for browser! Try a smaller file or close other tabs.")
+      // Friendly error handling
+      if (err.message && err.message.includes("memory")) {
+        alert("File too big! Browser ran out of memory. Try a smaller file.")
       } else {
-        alert("Error: " + err.message)
+        alert("Conversion Error: " + (err.message || "Unknown error"))
       }
     } finally {
       setLoading(false)

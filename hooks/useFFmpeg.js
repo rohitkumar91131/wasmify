@@ -26,7 +26,7 @@ export const useFFmpeg = () => {
     })
 
     try {
-      // Local folder path
+      // ✅ Local folder path (No CDN)
       const baseURL = `${window.location.origin}/ffmpeg`
 
       const coreURL = await toBlobURL(
@@ -39,20 +39,16 @@ export const useFFmpeg = () => {
         "application/wasm"
       )
 
-      // NEW: Load the worker file for Multi-Threading
-      const workerURL = await toBlobURL(
-        `${baseURL}/ffmpeg-core.worker.js`,
-        "text/javascript"
-      )
+      // ❌ Worker URL hata diya hai (Single Threaded mode ke liye)
+      // Isse memory crash aur header issues solve ho jayenge.
 
       await ffmpeg.load({
         coreURL,
-        wasmURL,
-        workerURL // Yeh zaroori hai speed ke liye
+        wasmURL
       })
 
       setLoaded(true)
-      setMessage("FFmpeg Ready (Multi-Threaded)")
+      setMessage("FFmpeg Ready")
     } catch (err) {
       console.error(err)
       setMessage("Failed: " + (err.message || err))
