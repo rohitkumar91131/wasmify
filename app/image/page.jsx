@@ -1,11 +1,5 @@
-import React from 'react'
+import ImageConverter from "@/components/image/ImageConverter"
 
-function page() {
-  return (
-    <div>
-      
-    </div>
-  )
+export default function ImagePage() {
+  return <ImageConverter />
 }
-
-export default page
