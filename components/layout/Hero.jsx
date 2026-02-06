@@ -13,7 +13,7 @@ export default function Hero() {
 
       <div className="mt-10 flex gap-4">
         <a
-          href="/convert"
+          href="/video"
           className="px-6 py-3 bg-green-500 text-black font-semibold rounded-lg hover:bg-green-400 transition"
         >
           Start Converting
