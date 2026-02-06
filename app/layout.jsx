@@ -2,8 +2,12 @@ import "./globals.css"
 import Navbar from "@/components/layout/Navbar"
 
 export const metadata = {
-  title: "Wasmify - Browser Based Subtitle Tools",
-  description: "Sync, Burn-in, and Edit subtitles directly in your browser with privacy.",
+  title: {
+    default: "Wasmify | All-in-One Browser-Based File Tools",
+    template: "%s | Wasmify"
+  },
+  description: "Free, private, and fast browser-based tools to edit Video, Audio, PDF, and Images. No file uploads to server.",
+  keywords: ["video editor", "audio converter", "pdf tools", "image compressor", "browser tools", "wasmify"],
 };
 
 export default function RootLayout({ children }) {
