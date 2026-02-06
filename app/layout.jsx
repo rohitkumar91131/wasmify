@@ -2,9 +2,9 @@ import "./globals.css"
 import Navbar from "@/components/layout/Navbar"
 
 export const metadata = {
-  title: "Wasmify",
-  description: "Client-side FFmpeg tools"
-}
+  title: "Wasmify - Browser Based Subtitle Tools",
+  description: "Sync, Burn-in, and Edit subtitles directly in your browser with privacy.",
+};
 
 export default function RootLayout({ children }) {
   return (
