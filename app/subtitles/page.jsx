@@ -1,11 +1,7 @@
-import React from 'react'
-
-function page() {
+export default function Page() {
   return (
-    <div>
-      
+    <div className="flex items-center justify-center h-screen text-lg">
+      This feature is coming 🚧
     </div>
   )
 }
-
-export default page

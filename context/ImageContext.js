@@ -1,90 +1,100 @@
 "use client"
 
-import { createContext, useContext, useState } from "react"
-import { useFFmpeg } from "@/hooks/useFFmpeg"
-import { fetchFile } from "@ffmpeg/util"
+import { processImageTool } from "@/app/image/logic/imageProcessor"
+import React, { createContext, useContext, useState } from "react"
 
 const ImageContext = createContext()
 
 export function ImageProvider({ children }) {
-  const { ffmpeg, loaded, message } = useFFmpeg()
+  const [selectedFile, setSelectedFile] = useState(null)
   
-  const [file, setFile] = useState(null)
-  const [format, setFormat] = useState("jpg")
-  const [loading, setLoading] = useState(false)
+  // --- NEW: Multiple Files State ---
+  const [selectedFiles, setSelectedFiles] = useState([]) 
   
-  // ✅ NEW: Error State
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
-  async function convert() {
-    if (!file || !loaded || !ffmpeg) return
+  const [toolSettings, setToolSettings] = useState({
+    format: "png",
+    resizeScale: 0.5,
+    resizeMode: "scale",
+    targetWidth: 1080,
+    quality: 0.8,
+    // PDF Settings
+    pdfPaperSize: "a4",
+    pdfOrientation: "portrait",
+    pdfMargin: 10
+  })
 
-    setLoading(true)
-    setError(null) // Nayi conversion start hone par purana error saaf karo
+  // Handle Single File
+  const handleFileSelect = (file) => {
+    setSelectedFile(file)
+    setSelectedFiles([]) // Clear multi
+    setResult(null)
+    setError(null)
+    setProgress(0)
+  }
+
+  // --- NEW: Handle Multiple Files ---
+  const handleMultiFileSelect = (files) => {
+    const fileArray = Array.from(files);
+    setSelectedFiles(fileArray)
+    setSelectedFile(fileArray[0]) // Preview the first file
+    setResult(null)
+    setError(null)
+    setProgress(0)
+  }
+
+  const updateToolSettings = (newSettings) => {
+    setToolSettings(prev => ({ ...prev, ...newSettings }))
+  }
+
+  const executeTool = async (toolName) => {
+    // Check if we have EITHER a single file OR multiple files
+    if (!selectedFile && selectedFiles.length === 0) return;
+
+    setIsProcessing(true)
+    setProgress(10)
+    setError(null)
+    setResult(null)
 
     try {
-      const fileExt = file.name.split('.').pop()
-      const inputName = `image_input.${fileExt}`
-      const outputName = `image_output.${format}`
-
-      const fileData = await fetchFile(file)
-      await ffmpeg.writeFile(inputName, fileData)
-
-      await ffmpeg.exec([
-        "-i", inputName,
-        outputName
-      ])
-
-      const data = await ffmpeg.readFile(outputName)
-
-      const blob = new Blob([data.buffer], { type: `image/${format}` })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = outputName
-      document.body.appendChild(a)
-      a.click()
+      await new Promise(r => setTimeout(r, 100));
       
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      
-      await ffmpeg.deleteFile(inputName)
-      await ffmpeg.deleteFile(outputName)
+      // Decide payload: Array for PDF, Single File for others
+      const inputPayload = toolName === "Image to PDF" ? selectedFiles : selectedFile;
 
+      const output = await processImageTool(toolName, inputPayload, toolSettings);
+      
+      setProgress(100);
+      setResult(output);
     } catch (err) {
-      console.error(err)
-      
-      // ✅ Smart Error Message Logic
-      // Agar "undefined" ya khali error aaye, to iska matlab codec missing hai (e.g. AVIF)
-      const errString = err.message ? err.message.toString() : ""
-      
-      if (!errString || errString.includes("undefined") || errString.includes("function")) {
-        setError(`Failed! The format '${format.toUpperCase()}' is not supported by this browser.`)
-      } else {
-        setError(`Conversion Failed: ${errString}`)
-      }
-      
+      console.error(err);
+      setError(err.message || "An error occurred");
     } finally {
-      setLoading(false)
+      setIsProcessing(false);
     }
   }
 
   return (
-    <ImageContext.Provider 
-      value={{ 
-        file, setFile, 
-        format, setFormat, 
-        loading, 
-        error, // Export Error
-        convert,
-        loaded, message 
-      }}
-    >
+    <ImageContext.Provider value={{
+      selectedFile,
+      selectedFiles,
+      handleFileSelect,
+      handleMultiFileSelect,
+      executeTool,
+      isProcessing,
+      progress,
+      result,
+      error,
+      toolSettings,
+      updateToolSettings
+    }}>
       {children}
     </ImageContext.Provider>
   )
 }
 
-export function useImage() {
-  return useContext(ImageContext)
-}
+export const useImage = () => useContext(ImageContext)

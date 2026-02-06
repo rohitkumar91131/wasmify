@@ -3,90 +3,100 @@
 import { createContext, useContext, useState } from "react"
 import { useFFmpeg } from "@/hooks/useFFmpeg"
 import { fetchFile } from "@ffmpeg/util"
+import { generateCommand } from "@/app/video/logic/videoProcessor"
 
 const VideoContext = createContext()
 
 export function VideoProvider({ children }) {
-  const { ffmpeg, loaded, message } = useFFmpeg()
+  const { ffmpeg, loaded, message: ffmpegStatus } = useFFmpeg()
   
-  const [file, setFile] = useState(null)
-  const [format, setFormat] = useState("mp4")
-  const [loading, setLoading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
 
-  async function convert() {
-    if (!file || !loaded || !ffmpeg) return
+  // --- NEW: Universal Tool Settings ---
+  // यह एक ऑब्जेक्ट है जो हर टूल की सेटिंग्स रखेगा
+  const [toolSettings, setToolSettings] = useState({
+    format: "mp4",      // For Format Conversion
+    quality: "medium",  // For Compression
+    resizeScale: 1,     // For Resize
+    volume: 1,          // For Audio
+    // ... add more defaults as needed
+  })
 
-    setLoading(true)
+  const handleFileSelect = (file) => {
+    setSelectedFile(file)
+    setResult(null)
+    setError(null)
     setProgress(0)
+  }
+
+  // Settings update helper
+  const updateToolSettings = (newSettings) => {
+    setToolSettings(prev => ({ ...prev, ...newSettings }))
+  }
+
+  async function executeTool(toolName) {
+    if (!selectedFile || !loaded || !ffmpeg) {
+      setError("Engine not loaded or file missing.")
+      return
+    }
+
+    setIsProcessing(true)
+    setProgress(0)
+    setError(null)
+    setResult(null)
 
     try {
-      // 1. Setup file names
-      const fileExt = file.name.split('.').pop()
+      const fileExt = selectedFile.name.split('.').pop()
       const inputName = `input.${fileExt}`
-      const outputName = `output.${format}`
 
-      // 2. Write file to memory
-      const fileData = await fetchFile(file)
-      await ffmpeg.writeFile(inputName, fileData)
+      await ffmpeg.writeFile(inputName, await fetchFile(selectedFile))
 
-      // 3. Progress Listener
-      ffmpeg.on("progress", ({ progress: p }) => {
-        setProgress(Math.round(p * 100))
+      // --- CRITICAL CHANGE ---
+      // अब हम generateCommand में toolSettings भेज रहे हैं
+      const { args, outputFile, mimeType } = generateCommand(toolName, inputName, toolSettings)
+
+      const handleProgress = ({ progress: p }) => setProgress(Math.round(p * 100))
+      ffmpeg.on("progress", handleProgress)
+
+      console.log(`Command: ${args.join(" ")}`)
+      await ffmpeg.exec(args)
+
+      const data = await ffmpeg.readFile(outputFile)
+      const blob = new Blob([data.buffer], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+
+      setResult({
+        message: "Success",
+        details: `Created ${outputFile}`,
+        downloadUrl: url,
+        fileName: outputFile
       })
 
-      // 4. Run FFmpeg Command
-      await ffmpeg.exec([
-        "-i", inputName,
-        "-preset", "ultrafast",
-        "-crf", "28",
-        outputName
-      ])
-
-      // 5. Read Output
-      const data = await ffmpeg.readFile(outputName)
-
-      // 6. Standard Download (Blob)
-      // This is the simplest, most compatible method
-      const blob = new Blob([data.buffer], { type: `video/${format}` })
-      const url = URL.createObjectURL(blob)
-      
-      const a = document.createElement("a")
-      a.href = url
-      a.download = outputName
-      document.body.appendChild(a) // Required for Firefox sometimes
-      a.click()
-      
-      // Clean up the DOM and Memory
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
-      // 7. Cleanup FFmpeg Memory
       await ffmpeg.deleteFile(inputName)
-      await ffmpeg.deleteFile(outputName)
+      await ffmpeg.deleteFile(outputFile)
+      ffmpeg.off("progress", handleProgress)
 
     } catch (err) {
       console.error(err)
-      if (err.message && err.message.includes("memory")) {
-        alert("File too big! Browser ran out of memory. Try a smaller file.")
-      } else {
-        alert("Conversion Error: " + (err.message || "Unknown error"))
-      }
+      setError(err.message || "Processing Failed")
     } finally {
-      setLoading(false)
-      setProgress(0)
+      setIsProcessing(false)
     }
   }
 
   return (
     <VideoContext.Provider 
       value={{ 
-        file, setFile, 
-        format, setFormat, 
-        loading, 
-        progress,
-        convert,
-        loaded, message 
+        loaded, ffmpegStatus,
+        selectedFile, handleFileSelect,
+        executeTool,
+        isProcessing, progress, result, error,
+        // New Exports
+        toolSettings, updateToolSettings
       }}
     >
       {children}

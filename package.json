@@ -11,7 +11,11 @@
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
+    "downloadjs": "^1.4.7",
+    "gsap": "^3.14.2",
+    "jspdf": "^4.1.0",
     "next": "16.1.6",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "streamsaver": "^2.0.6"

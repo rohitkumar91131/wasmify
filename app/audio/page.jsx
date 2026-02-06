@@ -1,11 +1,6 @@
-import React from 'react'
+"use client"
+import AudioDashboard from "./components/AudioDashboard"
 
-function page() {
-  return (
-    <div>
-      
-    </div>
-  )
+export default function AudioPage() {
+  return <AudioDashboard />
 }
-
-export default page
