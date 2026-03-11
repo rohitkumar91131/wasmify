@@ -1,15 +1,12 @@
 "use client"
 
-import { processImageTool } from "@/app/image/logic/imageProcessor"
 import React, { createContext, useContext, useState } from "react"
 
 const ImageContext = createContext()
 
 export function ImageProvider({ children }) {
   const [selectedFile, setSelectedFile] = useState(null)
-  
-  // --- NEW: Multiple Files State ---
-  const [selectedFiles, setSelectedFiles] = useState([]) 
+  const [selectedFiles, setSelectedFiles] = useState([])
   
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -22,26 +19,23 @@ export function ImageProvider({ children }) {
     resizeMode: "scale",
     targetWidth: 1080,
     quality: 0.8,
-    // PDF Settings
     pdfPaperSize: "a4",
     pdfOrientation: "portrait",
     pdfMargin: 10
   })
 
-  // Handle Single File
   const handleFileSelect = (file) => {
     setSelectedFile(file)
-    setSelectedFiles([]) // Clear multi
+    setSelectedFiles([])
     setResult(null)
     setError(null)
     setProgress(0)
   }
 
-  // --- NEW: Handle Multiple Files ---
   const handleMultiFileSelect = (files) => {
     const fileArray = Array.from(files);
     setSelectedFiles(fileArray)
-    setSelectedFile(fileArray[0]) // Preview the first file
+    setSelectedFile(fileArray[0])
     setResult(null)
     setError(null)
     setProgress(0)
@@ -52,7 +46,6 @@ export function ImageProvider({ children }) {
   }
 
   const executeTool = async (toolName) => {
-    // Check if we have EITHER a single file OR multiple files
     if (!selectedFile && selectedFiles.length === 0) return;
 
     setIsProcessing(true)
@@ -61,15 +54,35 @@ export function ImageProvider({ children }) {
     setResult(null)
 
     try {
-      await new Promise(r => setTimeout(r, 100));
-      
-      // Decide payload: Array for PDF, Single File for others
-      const inputPayload = toolName === "Image to PDF" ? selectedFiles : selectedFile;
+      const formData = new FormData()
+      formData.append("tool", toolName)
+      formData.append("settings", JSON.stringify(toolSettings))
 
-      const output = await processImageTool(toolName, inputPayload, toolSettings);
-      
-      setProgress(100);
-      setResult(output);
+      if (toolName === "Image to PDF") {
+        selectedFiles.forEach(f => formData.append("files", f))
+      } else {
+        formData.append("file", selectedFile)
+      }
+
+      const response = await fetch("/api/image", { method: "POST", body: formData })
+      setProgress(90)
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error: ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const fileName = response.headers.get("X-File-Name") || `edited_${Date.now()}`
+      const url = URL.createObjectURL(blob)
+
+      setProgress(100)
+      setResult({
+        message: "Success",
+        details: `Processed image`,
+        downloadUrl: url,
+        fileName
+      });
     } catch (err) {
       console.error(err);
       setError(err.message || "An error occurred");

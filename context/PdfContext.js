@@ -1,13 +1,12 @@
 "use client"
 
-import { processPdfTool } from "@/app/pdf/logic/pdfProcessor"
 import React, { createContext, useContext, useState } from "react"
 
 const PdfContext = createContext()
 
 export function PdfProvider({ children }) {
   const [selectedFile, setSelectedFile] = useState(null)
-  const [selectedFiles, setSelectedFiles] = useState([]) 
+  const [selectedFiles, setSelectedFiles] = useState([])
   
   const [isProcessing, setIsProcessing] = useState(false)
   const [result, setResult] = useState(null)
@@ -20,7 +19,6 @@ export function PdfProvider({ children }) {
     watermarkText: "Confidential"
   })
 
-  // Single File
   const handleFileSelect = (file) => {
     setSelectedFile(file)
     setSelectedFiles([])
@@ -28,7 +26,6 @@ export function PdfProvider({ children }) {
     setError(null)
   }
 
-  // Multi File (Merge)
   const handleMultiFileSelect = (files) => {
     const fileArray = Array.from(files);
     setSelectedFiles(fileArray)
@@ -49,19 +46,29 @@ export function PdfProvider({ children }) {
     setResult(null)
 
     try {
-      // Delay for UI feedback
-      await new Promise(r => setTimeout(r, 500));
-      
-      const isMerge = toolName.toLowerCase().includes("merge");
-      const input = isMerge ? selectedFiles : selectedFile;
+      const formData = new FormData()
+      formData.append("tool", toolName)
+      formData.append("settings", JSON.stringify(toolSettings))
 
-      const output = await processPdfTool(toolName, input, toolSettings);
-      
-      setResult({
-          downloadUrl: output.url,
-          fileName: output.fileName,
-          message: output.message
-      });
+      const isMerge = toolName.toLowerCase().includes("merge")
+      if (isMerge) {
+        selectedFiles.forEach(f => formData.append("files", f))
+      } else {
+        formData.append("file", selectedFile)
+      }
+
+      const response = await fetch("/api/pdf", { method: "POST", body: formData })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error: ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const fileName = response.headers.get("X-File-Name") || `output_${Date.now()}.pdf`
+      const url = URL.createObjectURL(blob)
+
+      setResult({ downloadUrl: url, fileName, message: "Success" });
 
     } catch (err) {
       console.error(err);

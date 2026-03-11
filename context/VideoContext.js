@@ -1,29 +1,21 @@
 "use client"
 
 import { createContext, useContext, useState } from "react"
-import { useFFmpeg } from "@/hooks/useFFmpeg"
-import { fetchFile } from "@ffmpeg/util"
-import { generateCommand } from "@/app/video/logic/videoProcessor"
 
 const VideoContext = createContext()
 
 export function VideoProvider({ children }) {
-  const { ffmpeg, loaded, message: ffmpegStatus } = useFFmpeg()
-  
   const [selectedFile, setSelectedFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
-  // --- NEW: Universal Tool Settings ---
-  // यह एक ऑब्जेक्ट है जो हर टूल की सेटिंग्स रखेगा
   const [toolSettings, setToolSettings] = useState({
-    format: "mp4",      // For Format Conversion
-    quality: "medium",  // For Compression
-    resizeScale: 1,     // For Resize
-    volume: 1,          // For Audio
-    // ... add more defaults as needed
+    format: "mp4",
+    quality: "medium",
+    resizeScale: 1,
+    volume: 1,
   })
 
   const handleFileSelect = (file) => {
@@ -33,14 +25,13 @@ export function VideoProvider({ children }) {
     setProgress(0)
   }
 
-  // Settings update helper
   const updateToolSettings = (newSettings) => {
     setToolSettings(prev => ({ ...prev, ...newSettings }))
   }
 
   async function executeTool(toolName) {
-    if (!selectedFile || !loaded || !ffmpeg) {
-      setError("Engine not loaded or file missing.")
+    if (!selectedFile) {
+      setError("Please select a file first.")
       return
     }
 
@@ -50,35 +41,26 @@ export function VideoProvider({ children }) {
     setResult(null)
 
     try {
-      const fileExt = selectedFile.name.split('.').pop()
-      const inputName = `input.${fileExt}`
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      formData.append("tool", toolName)
+      formData.append("settings", JSON.stringify(toolSettings))
 
-      await ffmpeg.writeFile(inputName, await fetchFile(selectedFile))
+      setProgress(10)
+      const response = await fetch("/api/video", { method: "POST", body: formData })
+      setProgress(90)
 
-      // --- CRITICAL CHANGE ---
-      // अब हम generateCommand में toolSettings भेज रहे हैं
-      const { args, outputFile, mimeType } = generateCommand(toolName, inputName, toolSettings)
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error: ${response.status}`)
+      }
 
-      const handleProgress = ({ progress: p }) => setProgress(Math.round(p * 100))
-      ffmpeg.on("progress", handleProgress)
-
-      console.log(`Command: ${args.join(" ")}`)
-      await ffmpeg.exec(args)
-
-      const data = await ffmpeg.readFile(outputFile)
-      const blob = new Blob([data.buffer], { type: mimeType })
+      const blob = await response.blob()
+      const fileName = response.headers.get("X-File-Name") || `output_${Date.now()}.mp4`
       const url = URL.createObjectURL(blob)
 
-      setResult({
-        message: "Success",
-        details: `Created ${outputFile}`,
-        downloadUrl: url,
-        fileName: outputFile
-      })
-
-      await ffmpeg.deleteFile(inputName)
-      await ffmpeg.deleteFile(outputFile)
-      ffmpeg.off("progress", handleProgress)
+      setProgress(100)
+      setResult({ message: "Success", details: `Created ${fileName}`, downloadUrl: url, fileName })
 
     } catch (err) {
       console.error(err)
@@ -91,11 +73,10 @@ export function VideoProvider({ children }) {
   return (
     <VideoContext.Provider 
       value={{ 
-        loaded, ffmpegStatus,
+        loaded: true, ffmpegStatus: "Ready",
         selectedFile, handleFileSelect,
         executeTool,
         isProcessing, progress, result, error,
-        // New Exports
         toolSettings, updateToolSettings
       }}
     >
